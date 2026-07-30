@@ -387,11 +387,45 @@ async function callGemini(key, model, body){
   return res.json();
 }
 
+// Resolves which text-generation and TTS model to actually use for this key,
+// instead of assuming fixed model IDs that may not be available/valid on it.
+let modelCache = { key: null, text: 'gemini-2.5-flash', tts: 'gemini-2.5-flash-preview-tts' };
+
+async function resolveModels(key){
+  if(modelCache.key === key) return modelCache;
+  try{
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+    if(!res.ok) throw new Error(`models list returned ${res.status}`);
+    const data = await res.json();
+    const models = (data.models || []).map(m => ({
+      id: m.name.replace(/^models\//, ''),
+      methods: m.supportedGenerationMethods || []
+    }));
+    const canGenerate = m => m.methods.includes('generateContent');
+    const isNoise = id => /embedding|aqa|vision|imagen|veo|gemma|learnlm/i.test(id);
+    const ttsCandidates = models.filter(m => canGenerate(m) && /tts/i.test(m.id));
+    const textCandidates = models.filter(m => canGenerate(m) && !/tts/i.test(m.id) && !isNoise(m.id));
+    const pickBest = (list, fallback) => list.length ? (list.find(m => /flash/i.test(m.id)) || list[0]).id : fallback;
+
+    modelCache = {
+      key,
+      text: pickBest(textCandidates, modelCache.text),
+      tts: pickBest(ttsCandidates, modelCache.tts)
+    };
+    console.log('Resolved Gemini models for this key:', modelCache);
+  }catch(e){
+    console.warn('Could not list models for this key, falling back to defaults:', e.message);
+    modelCache = { ...modelCache, key };
+  }
+  return modelCache;
+}
+
 $('surpriseBtn').addEventListener('click', async () => {
   const key = requireKey(); if(!key) return;
   setStatus($('scriptStatus'), 'thinking of a topic…');
   try{
-    const data = await callGemini(key, 'gemini-2.5-flash', {
+    const models = await resolveModels(key);
+    const data = await callGemini(key, models.text, {
       contents:[{parts:[{text:'Give me exactly one surprising, scroll-stopping topic idea for a 30-second general-audience YouTube Short. Reply with ONLY the topic phrase, nothing else, no quotes.'}]}]
     });
     const topic = data.candidates[0].content.parts[0].text.trim();
@@ -418,7 +452,8 @@ Rules:
 Reply with ONLY valid JSON, no markdown fences, in this exact shape:
 {"title":"...", "lines":["...","...","..."], "hashtags":["...","...","...","...","..."]}`;
 
-    const data = await callGemini(key, 'gemini-2.5-flash', {
+    const models = await resolveModels(key);
+    const data = await callGemini(key, models.text, {
       contents:[{parts:[{text: prompt}]}],
       generationConfig:{ responseMimeType:'application/json' }
     });
@@ -501,7 +536,8 @@ $('voiceBtn').addEventListener('click', async () => {
   setStatus($('voiceStatus'), 'generating voiceover…');
   $('voiceBtn').disabled = true;
   try{
-    const data = await callGemini(key, 'gemini-2.5-flash-preview-tts', {
+    const models = await resolveModels(key);
+    const data = await callGemini(key, models.tts, {
       contents:[{parts:[{text: fullText}]}],
       generationConfig:{
         responseModalities:['AUDIO'],
@@ -826,6 +862,7 @@ $('batchBtn').addEventListener('click', async () => {
   $('batchBtn').disabled = true;
   stopPreview();
   audioCtx.resume();
+  const models = await resolveModels(key);
 
   const failed = [];
   for(let i=0; i<topics.length; i++) {
@@ -840,7 +877,7 @@ Rules:
 - Also generate: a short YouTube title (under 60 chars) and 5 relevant hashtags (no # symbol, just words).
 Reply with ONLY valid JSON, no markdown fences, in this exact shape:
 {"title":"...", "lines":["...","...","..."], "hashtags":["...","...","...","...","..."]}`;
-      const sData = await callGemini(key, 'gemini-2.5-flash', {
+      const sData = await callGemini(key, models.text, {
         contents:[{parts:[{text: prompt}]}],
         generationConfig:{ responseMimeType:'application/json' }
       });
@@ -852,7 +889,7 @@ Reply with ONLY valid JSON, no markdown fences, in this exact shape:
       setStatus($('voiceStatus'), `Batch ${i+1}/${topics.length}: generating voice...`);
       const voice = $('voiceSelect').value;
       const fullText = scriptData.lines.join(' ');
-      const vData = await callGemini(key, 'gemini-2.5-flash-preview-tts', {
+      const vData = await callGemini(key, models.tts, {
         contents:[{parts:[{text: fullText}]}],
         generationConfig:{
           responseModalities:['AUDIO'],
