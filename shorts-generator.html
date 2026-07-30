@@ -387,9 +387,15 @@ async function callGemini(key, model, body){
   return res.json();
 }
 
-// Resolves which text-generation and TTS model to actually use for this key,
-// instead of assuming fixed model IDs that may not be available/valid on it.
-let modelCache = { key: null, text: 'gemini-2.5-flash', tts: 'gemini-2.5-flash-preview-tts' };
+// Resolves ranked lists of candidate text/TTS models for this key, instead of
+// assuming a single fixed model ID — Google periodically retires specific
+// model IDs for new keys/projects (e.g. "no longer available to new users"),
+// so we need somewhere to fall back to besides one hardcoded name.
+let modelCache = {
+  key: null,
+  textCandidates: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'],
+  ttsCandidates: ['gemini-2.5-flash-preview-tts']
+};
 
 async function resolveModels(key){
   if(modelCache.key === key) return modelCache;
@@ -403,21 +409,46 @@ async function resolveModels(key){
     }));
     const canGenerate = m => m.methods.includes('generateContent');
     const isNoise = id => /embedding|aqa|vision|imagen|veo|gemma|learnlm/i.test(id);
-    const ttsCandidates = models.filter(m => canGenerate(m) && /tts/i.test(m.id));
-    const textCandidates = models.filter(m => canGenerate(m) && !/tts/i.test(m.id) && !isNoise(m.id));
-    const pickBest = (list, fallback) => list.length ? (list.find(m => /flash/i.test(m.id)) || list[0]).id : fallback;
+    const versionOf = id => { const m = id.match(/(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0; };
+    // newest version first, and within a version prefer "flash" (cheap/fast) over "pro"
+    const rank = list => list
+      .sort((a,b) => versionOf(b.id) - versionOf(a.id))
+      .sort((a,b) => (/flash/i.test(a.id)?0:1) - (/flash/i.test(b.id)?0:1))
+      .map(m => m.id);
+
+    const textCandidates = rank(models.filter(m => canGenerate(m) && !/tts/i.test(m.id) && !isNoise(m.id)));
+    const ttsCandidates = rank(models.filter(m => canGenerate(m) && /tts/i.test(m.id)));
 
     modelCache = {
       key,
-      text: pickBest(textCandidates, modelCache.text),
-      tts: pickBest(ttsCandidates, modelCache.tts)
+      textCandidates: textCandidates.length ? textCandidates : modelCache.textCandidates,
+      ttsCandidates: ttsCandidates.length ? ttsCandidates : modelCache.ttsCandidates
     };
-    console.log('Resolved Gemini models for this key:', modelCache);
+    console.log('Resolved Gemini model candidates for this key:', modelCache);
   }catch(e){
     console.warn('Could not list models for this key, falling back to defaults:', e.message);
-    modelCache = { ...modelCache, key };
   }
   return modelCache;
+}
+
+// Tries each candidate model in order; if one comes back 404 (retired/unavailable
+// for this key), moves on to the next instead of failing outright. Once a model
+// works, it's promoted to the front so later calls this session go straight to it.
+async function callGeminiAny(key, candidates, body){
+  let lastErr;
+  for(let i=0; i<candidates.length; i++){
+    const model = candidates[i];
+    try{
+      const result = await callGemini(key, model, body);
+      if(i > 0){ candidates.splice(i,1); candidates.unshift(model); }
+      return result;
+    }catch(e){
+      lastErr = e;
+      if(!/API error 404/.test(e.message)) throw e;
+      console.warn(`Model "${model}" unavailable (${e.message}), trying next candidate…`);
+    }
+  }
+  throw lastErr || new Error('No candidate models available for this key.');
 }
 
 $('surpriseBtn').addEventListener('click', async () => {
@@ -425,7 +456,7 @@ $('surpriseBtn').addEventListener('click', async () => {
   setStatus($('scriptStatus'), 'thinking of a topic…');
   try{
     const models = await resolveModels(key);
-    const data = await callGemini(key, models.text, {
+    const data = await callGeminiAny(key, models.textCandidates, {
       contents:[{parts:[{text:'Give me exactly one surprising, scroll-stopping topic idea for a 30-second general-audience YouTube Short. Reply with ONLY the topic phrase, nothing else, no quotes.'}]}]
     });
     const topic = data.candidates[0].content.parts[0].text.trim();
@@ -453,7 +484,7 @@ Reply with ONLY valid JSON, no markdown fences, in this exact shape:
 {"title":"...", "lines":["...","...","..."], "hashtags":["...","...","...","...","..."]}`;
 
     const models = await resolveModels(key);
-    const data = await callGemini(key, models.text, {
+    const data = await callGeminiAny(key, models.textCandidates, {
       contents:[{parts:[{text: prompt}]}],
       generationConfig:{ responseMimeType:'application/json' }
     });
@@ -537,7 +568,7 @@ $('voiceBtn').addEventListener('click', async () => {
   $('voiceBtn').disabled = true;
   try{
     const models = await resolveModels(key);
-    const data = await callGemini(key, models.tts, {
+    const data = await callGeminiAny(key, models.ttsCandidates, {
       contents:[{parts:[{text: fullText}]}],
       generationConfig:{
         responseModalities:['AUDIO'],
@@ -877,7 +908,7 @@ Rules:
 - Also generate: a short YouTube title (under 60 chars) and 5 relevant hashtags (no # symbol, just words).
 Reply with ONLY valid JSON, no markdown fences, in this exact shape:
 {"title":"...", "lines":["...","...","..."], "hashtags":["...","...","...","...","..."]}`;
-      const sData = await callGemini(key, models.text, {
+      const sData = await callGeminiAny(key, models.textCandidates, {
         contents:[{parts:[{text: prompt}]}],
         generationConfig:{ responseMimeType:'application/json' }
       });
@@ -889,7 +920,7 @@ Reply with ONLY valid JSON, no markdown fences, in this exact shape:
       setStatus($('voiceStatus'), `Batch ${i+1}/${topics.length}: generating voice...`);
       const voice = $('voiceSelect').value;
       const fullText = scriptData.lines.join(' ');
-      const vData = await callGemini(key, models.tts, {
+      const vData = await callGeminiAny(key, models.ttsCandidates, {
         contents:[{parts:[{text: fullText}]}],
         generationConfig:{
           responseModalities:['AUDIO'],
