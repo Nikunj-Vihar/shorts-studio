@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shorts Studio — 30s AI Shorts Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E0F11;
+    --panel:#17181B;
+    --panel-2:#1D1F23;
+    --line:#2A2C30;
+    --text:#F2F1ED;
+    --muted:#8A8D93;
+    --rec:#FF4B3E;
+    --cyan:#38E1C6;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .wrap{
+    max-width:1180px;
+    margin:0 auto;
+    padding:32px 24px 80px;
+  }
+  header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:16px;
+    margin-bottom:28px;
+    border-bottom:1px solid var(--line);
+    padding-bottom:20px;
+    flex-wrap:wrap;
+  }
+  .brand{
+    font-family:'Bebas Neue',sans-serif;
+    font-size:34px;
+    letter-spacing:1px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .brand .dot{
+    width:11px;height:11px;border-radius:50%;
+    background:var(--rec);
+    box-shadow:0 0 0 3px rgba(255,75,62,0.15);
+  }
+  .brand small{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    color:var(--muted);
+    letter-spacing:0.5px;
+    margin-left:6px;
+  }
+  .keyrow{display:flex;align-items:center;gap:10px;}
+  .keyrow input{
+    background:var(--panel);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:8px 12px;
+    border-radius:6px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    width:230px;
+  }
+  .keyrow a{color:var(--cyan);font-size:12px;text-decoration:none;}
+  .keyrow a:hover{text-decoration:underline;}
+
+  .grid{
+    display:grid;
+    grid-template-columns:340px 1fr;
+    gap:28px;
+  }
+  @media(max-width:860px){ .grid{grid-template-columns:1fr;} }
+
+  /* PREVIEW COLUMN */
+  .preview-col{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:14px;
+  }
+  .phone{
+    position:relative;
+    width:300px;
+    height:534px;
+    border-radius:22px;
+    background:#000;
+    border:1px solid var(--line);
+    overflow:hidden;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,0.6);
+  }
+  .phone canvas{
+    width:100%;
+    height:100%;
+    display:block;
+  }
+  .timecode{
+    position:absolute;
+    top:12px;
+    left:12px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    color:var(--text);
+    background:rgba(0,0,0,0.5);
+    padding:3px 8px;
+    border-radius:4px;
+    letter-spacing:0.5px;
+  }
+  .rec-badge{
+    position:absolute;
+    top:12px;
+    right:12px;
+    display:none;
+    align-items:center;
+    gap:5px;
+    background:rgba(0,0,0,0.5);
+    padding:3px 8px;
+    border-radius:4px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+  }
+  .rec-badge.on{display:flex;}
+  .rec-badge .d{width:7px;height:7px;border-radius:50%;background:var(--rec);animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.25;}}
+
+  .timeline{
+    width:300px;
+    height:34px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:6px;
+    display:flex;
+    overflow:hidden;
+    position:relative;
+  }
+  .timeline .clip{
+    height:100%;
+    border-right:1px solid var(--bg);
+    position:relative;
+    background:var(--panel-2);
+  }
+  .timeline .clip.active{background:var(--cyan);}
+  .timeline .clip span{
+    position:absolute;
+    bottom:2px;left:4px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:8px;
+    color:var(--muted);
+  }
+  .timeline .clip.active span{color:#052A25;}
+  .playhead{
+    position:absolute;top:0;bottom:0;width:2px;background:#fff;
+    left:0;pointer-events:none;
+  }
+
+  .transport{display:flex;gap:8px;}
+  button{
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:13px;
+    border:none;
+    border-radius:7px;
+    padding:10px 16px;
+    cursor:pointer;
+    transition:transform .08s ease, opacity .15s ease;
+  }
+  button:active{transform:scale(0.97);}
+  button:disabled{opacity:0.35;cursor:not-allowed;}
+  .btn-primary{background:var(--cyan);color:#052A25;}
+  .btn-primary:hover:not(:disabled){opacity:0.9;}
+  .btn-ghost{background:var(--panel-2);color:var(--text);border:1px solid var(--line);}
+  .btn-ghost:hover:not(:disabled){background:var(--line);}
+  .btn-rec{background:var(--rec);color:#fff;}
+  .btn-rec:hover:not(:disabled){opacity:0.9;}
+
+  /* CONTROLS COLUMN */
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:20px;
+    margin-bottom:18px;
+  }
+  .panel h2{
+    font-family:'Bebas Neue',sans-serif;
+    font-size:18px;
+    letter-spacing:1px;
+    margin:0 0 12px;
+    color:var(--cyan);
+  }
+  label{
+    display:block;
+    font-size:12px;
+    color:var(--muted);
+    margin-bottom:6px;
+    letter-spacing:0.3px;
+  }
+  textarea, select, input[type=text]{
+    width:100%;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:10px 12px;
+    border-radius:7px;
+    font-family:'Inter',sans-serif;
+    font-size:14px;
+    resize:vertical;
+  }
+  textarea{min-height:64px;}
+  .row{display:flex;gap:10px;margin-bottom:12px;}
+  .row > *{flex:1;}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;}
+  .status{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    color:var(--muted);
+    margin-top:10px;
+    min-height:16px;
+  }
+  .status.err{color:var(--rec);}
+  .status.ok{color:var(--cyan);}
+
+  .script-lines{display:flex;flex-direction:column;gap:8px;margin-top:4px;}
+  .script-line{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:7px;
+    padding:9px 11px;
+    font-size:13px;
+    display:flex;
+    gap:10px;
+    align-items:flex-start;
+  }
+  .script-line .t{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    color:var(--muted);
+    white-space:nowrap;
+    padding-top:1px;
+  }
+  .meta-tags{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:10px;
+  }
+  .tag{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--cyan);
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    padding:3px 8px;
+    border-radius:5px;
+  }
+  .hint{
+    font-size:12px;
+    color:var(--muted);
+    line-height:1.5;
+    margin-top:8px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand"><span class="dot"></span>SHORTS STUDIO<small>30s / vertical / auto-render</small></div>
+    <div class="keyrow">
+      <input id="apiKey" type="text" placeholder="Paste Gemini API key">
+      <a href="https://aistudio.google.com/apikey" target="_blank">get a free key →</a>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- LEFT: PREVIEW -->
+    <div class="preview-col">
+      <div class="phone">
+        <canvas id="stage" width="1080" height="1920"></canvas>
+        <div class="timecode mono" id="timecode">00:00 / 00:00</div>
+        <div class="rec-badge mono" id="recBadge"><span class="d"></span>REC</div>
+      </div>
+      <div class="timeline" id="timeline"></div>
+      <div class="transport">
+        <button class="btn-ghost" id="playBtn" disabled>▶ Preview</button>
+        <button class="btn-rec" id="recordBtn" disabled>● Render video</button>
+        <button class="btn-primary" id="downloadBtn" style="display:none;">⭳ Download .webm</button>
+      </div>
+      <div class="hint" style="text-align:center;max-width:300px;">Preview plays the composition live. "Render video" re-runs it while capturing canvas + audio into a downloadable file.</div>
+    </div>
+
+    <!-- RIGHT: CONTROLS -->
+    <div>
+      <div class="panel">
+        <h2>01 · TOPIC</h2>
+        <div class="row">
+          <div>
+            <label>What's today's Short about? (Batch mode: enter one topic per line)</label>
+            <textarea id="topicInput" rows="3" placeholder="e.g. a weird fact about octopuses&#10;the history of the sandwich"></textarea>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn-ghost" id="surpriseBtn">🎲 Surprise me</button>
+          <button class="btn-primary" id="scriptBtn">Write script</button>
+          <button class="btn-primary" id="batchBtn" style="background:#5a5e66;color:#fff;border-color:#5a5e66;">Batch Generate All</button>
+        </div>
+        <div class="status" id="scriptStatus"></div>
+      </div>
+
+      <div class="panel" id="scriptPanel" style="display:none;">
+        <h2>02 · SCRIPT (~30s)</h2>
+        <div class="script-lines" id="scriptLines"></div>
+        <div class="meta-tags" id="tagRow"></div>
+      </div>
+
+      <div class="panel" id="voicePanel" style="display:none;">
+        <h2>03 · VOICE</h2>
+        <div class="row">
+          <div>
+            <label>Voice</label>
+            <select id="voiceSelect">
+              <option value="Kore">Kore — calm, neutral</option>
+              <option value="Puck">Puck — upbeat, energetic</option>
+              <option value="Charon">Charon — deep, narrator</option>
+              <option value="Fenrir">Fenrir — bold, punchy</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn-primary" id="voiceBtn">Generate voiceover</button>
+        </div>
+        <div class="status" id="voiceStatus"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const apiKeyInput = $('apiKey');
+apiKeyInput.value = localStorage.getItem('gemini_key') || '';
+apiKeyInput.addEventListener('input', () => localStorage.setItem('gemini_key', apiKeyInput.value.trim()));
+
+let scriptData = null;   // {title, hook, lines:[{text}], hashtags:[]}
+let lineTimings = [];    // [{text,start,end}]
+let audioBuffer = null;  // decoded AudioBuffer
+let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+const canvas = $('stage');
+const ctx = canvas.getContext('2d');
+
+function setStatus(el, msg, cls){
+  el.textContent = msg;
+  el.className = 'status' + (cls ? ' '+cls : '');
+}
+
+function requireKey(){
+  const k = apiKeyInput.value.trim();
+  if(!k){ alert('Paste a Gemini API key first (free at aistudio.google.com/apikey).'); return null; }
+  return k;
+}
+
+// ---------- 1. SCRIPT GENERATION ----------
+
+async function callGemini(key, model, body){
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  if(!res.ok){
+    const t = await res.text();
+    throw new Error(`API error ${res.status}: ${t.slice(0,200)}`);
+  }
+  return res.json();
+}
+
+$('surpriseBtn').addEventListener('click', async () => {
+  const key = requireKey(); if(!key) return;
+  setStatus($('scriptStatus'), 'thinking of a topic…');
+  try{
+    const data = await callGemini(key, 'gemini-2.5-flash', {
+      contents:[{parts:[{text:'Give me exactly one surprising, scroll-stopping topic idea for a 30-second general-audience YouTube Short. Reply with ONLY the topic phrase, nothing else, no quotes.'}]}]
+    });
+    const topic = data.candidates[0].content.parts[0].text.trim();
+    $('topicInput').value = topic;
+    setStatus($('scriptStatus'), '');
+  }catch(e){
+    setStatus($('scriptStatus'), e.message, 'err');
+  }
+});
+
+$('scriptBtn').addEventListener('click', async () => {
+  const key = requireKey(); if(!key) return;
+  const topic = $('topicInput').value.trim() || 'a surprising fact people rarely know';
+  setStatus($('scriptStatus'), 'writing script…');
+  $('scriptBtn').disabled = true;
+  try{
+    const prompt = `Write a 30-second YouTube Shorts script about: "${topic}".
+Rules:
+- Total spoken word count between 68 and 78 words (this must read aloud in ~30 seconds at a natural pace).
+- Strong hook in the first line (first 3 seconds), no generic "did you know" openers.
+- Break the script into 5 to 7 short caption lines, each 8-14 words, each a natural spoken beat.
+- End with a punchy closing line, not a call to action.
+- Also generate: a short YouTube title (under 60 chars) and 5 relevant hashtags (no # symbol, just words).
+Reply with ONLY valid JSON, no markdown fences, in this exact shape:
+{"title":"...", "lines":["...","...","..."], "hashtags":["...","...","...","...","..."]}`;
+
+    const data = await callGemini(key, 'gemini-2.5-flash', {
+      contents:[{parts:[{text: prompt}]}],
+      generationConfig:{ responseMimeType:'application/json' }
+    });
+    const raw = data.candidates[0].content.parts[0].text;
+    scriptData = JSON.parse(raw);
+    
+    const wordCount = scriptData.lines.join(' ').trim().split(/\s+/).length;
+    let statusMsg = 'done';
+    let statusCls = 'ok';
+    if (wordCount < 50 || wordCount > 90) {
+      statusMsg = `Warning: Script is ${wordCount} words. Audio may fall outside ~30s. Consider regenerating.`;
+      statusCls = 'err';
+    }
+
+    renderScript();
+    setStatus($('scriptStatus'), statusMsg, statusCls);
+    $('scriptPanel').style.display = 'block';
+    $('voicePanel').style.display = 'block';
+  }catch(e){
+    setStatus($('scriptStatus'), e.message, 'err');
+  }finally{
+    $('scriptBtn').disabled = false;
+  }
+});
+
+function renderScript(){
+  const wrap = $('scriptLines');
+  wrap.innerHTML = '';
+  scriptData.lines.forEach((line, i) => {
+    const div = document.createElement('div');
+    div.className = 'script-line';
+    div.innerHTML = `<span class="t mono">${String(i+1).padStart(2,'0')}</span><span>${line}</span>`;
+    wrap.appendChild(div);
+  });
+  const tagRow = $('tagRow');
+  tagRow.innerHTML = '';
+  const titleTag = document.createElement('div');
+  titleTag.className = 'tag';
+  titleTag.textContent = '📌 ' + scriptData.title;
+  tagRow.appendChild(titleTag);
+  (scriptData.hashtags||[]).forEach(h => {
+    const t = document.createElement('div');
+    t.className = 'tag';
+    t.textContent = '#' + h.replace(/^#/,'');
+    tagRow.appendChild(t);
+  });
+}
+
+// ---------- 2. VOICEOVER (Gemini TTS) ----------
+
+function pcm16ToWavBlob(pcmBytes, sampleRate){
+  const numChannels = 1, bitsPerSample = 16;
+  const blockAlign = numChannels * bitsPerSample/8;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = pcmBytes.length;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  const writeStr = (o,s) => { for(let i=0;i<s.length;i++) view.setUint8(o+i, s.charCodeAt(i)); };
+  writeStr(0,'RIFF'); view.setUint32(4, 36+dataSize, true); writeStr(8,'WAVE');
+  writeStr(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true);
+  view.setUint16(22,numChannels,true); view.setUint32(24,sampleRate,true);
+  view.setUint32(28,byteRate,true); view.setUint16(32,blockAlign,true); view.setUint16(34,bitsPerSample,true);
+  writeStr(36,'data'); view.setUint32(40,dataSize,true);
+  new Uint8Array(buffer,44).set(pcmBytes);
+  return new Blob([buffer], {type:'audio/wav'});
+}
+
+function base64ToBytes(b64){
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+$('voiceBtn').addEventListener('click', async () => {
+  const key = requireKey(); if(!key) return;
+  if(!scriptData){ alert('Write a script first.'); return; }
+  const voice = $('voiceSelect').value;
+  const fullText = scriptData.lines.join(' ');
+  setStatus($('voiceStatus'), 'generating voiceover…');
+  $('voiceBtn').disabled = true;
+  try{
+    const data = await callGemini(key, 'gemini-2.5-flash-preview-tts', {
+      contents:[{parts:[{text: fullText}]}],
+      generationConfig:{
+        responseModalities:['AUDIO'],
+        speechConfig:{ voiceConfig:{ prebuiltVoiceConfig:{ voiceName: voice } } }
+      }
+    });
+    console.log("Raw TTS API Response:", data);
+
+    let part, inline, mime, rateMatch, sampleRate, pcmBytes;
+    try {
+      part = data.candidates[0].content.parts[0];
+      inline = part.inlineData;
+      if (!inline || !inline.data) throw new Error("No inlineData or inlineData.data found in response.");
+      mime = inline.mimeType || '';
+      rateMatch = mime.match(/rate=(\d+)/);
+      sampleRate = rateMatch ? parseInt(rateMatch[1]) : 24000;
+      pcmBytes = base64ToBytes(inline.data);
+    } catch(e) {
+      console.error(e);
+      throw new Error("Failed to parse TTS audio data. Check console for raw response.");
+    }
+    const wavBlob = pcm16ToWavBlob(pcmBytes, sampleRate);
+    const arrBuf = await wavBlob.arrayBuffer();
+    audioBuffer = await audioCtx.decodeAudioData(arrBuf);
+
+    computeLineTimings();
+    buildTimelineUI();
+    drawFrame(0);
+    $('playBtn').disabled = false;
+    $('recordBtn').disabled = false;
+    setStatus($('voiceStatus'), `voiceover ready — ${audioBuffer.duration.toFixed(1)}s`, 'ok');
+  }catch(e){
+    setStatus($('voiceStatus'), e.message, 'err');
+  }finally{
+    $('voiceBtn').disabled = false;
+  }
+});
+
+function computeLineTimings(){
+  const lines = scriptData.lines;
+  const wordCounts = lines.map(l => l.trim().split(/\s+/).length);
+  const totalWords = wordCounts.reduce((a,b)=>a+b,0);
+  const dur = audioBuffer.duration;
+  let t = 0;
+  lineTimings = lines.map((text,i) => {
+    const share = wordCounts[i]/totalWords * dur;
+    const start = t, end = t + share;
+    t = end;
+    
+    const words = text.trim().split(/\s+/);
+    const totalChars = text.replace(/\s+/g, '').length;
+    let wt = start;
+    const wordTimings = words.map(w => {
+      const wShare = (w.length / Math.max(1, totalChars)) * share;
+      const wStart = wt, wEnd = wt + wShare;
+      wt = wEnd;
+      return { word: w, start: wStart, end: wEnd };
+    });
+
+    return {text, start, end, wordTimings};
+  });
+  lineTimings[lineTimings.length-1].end = dur;
+}
+
+function buildTimelineUI(){
+  const tl = $('timeline');
+  tl.innerHTML = '';
+  const dur = audioBuffer.duration;
+  lineTimings.forEach((seg,i) => {
+    const w = (seg.end-seg.start)/dur*100;
+    const div = document.createElement('div');
+    div.className = 'clip';
+    div.style.width = w+'%';
+    div.innerHTML = `<span>${(i+1)}</span>`;
+    div.dataset.idx = i;
+    tl.appendChild(div);
+  });
+  const ph = document.createElement('div');
+  ph.className = 'playhead';
+  ph.id = 'playhead';
+  tl.appendChild(ph);
+}
+
+// ---------- 3. CANVAS RENDERING ----------
+
+function wrapWords(wordObjs, maxWidth){
+  const lines = [];
+  let curLine = [];
+  let curWidth = 0;
+  const spaceWidth = ctx.measureText(' ').width;
+  
+  for(const obj of wordObjs){
+    const wText = obj.word.toUpperCase();
+    const wWidth = ctx.measureText(wText).width;
+    if(curLine.length > 0 && curWidth + spaceWidth + wWidth > maxWidth){
+      lines.push(curLine);
+      curLine = [ { ...obj, wText } ];
+      curWidth = wWidth;
+    } else {
+      curLine.push( { ...obj, wText } );
+      curWidth += (curLine.length===1 ? 0 : spaceWidth) + wWidth;
+    }
+  }
+  if(curLine.length > 0) lines.push(curLine);
+  return lines;
+}
+
+function drawFrame(t){
+  const W = canvas.width, H = canvas.height;
+  const dur = audioBuffer ? audioBuffer.duration : 1;
+
+  // dark editing suite background
+  ctx.fillStyle = '#0E0F11';
+  ctx.fillRect(0, 0, W, H);
+  
+  // subtle gradient vignette
+  const grad = ctx.createRadialGradient(W/2, H/2, W/4, W/2, H/2, H);
+  grad.addColorStop(0, 'transparent');
+  grad.addColorStop(1, 'rgba(0,0,0,0.6)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+  
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+  ctx.lineWidth = 2;
+  const gridSize = 120;
+  
+  ctx.save();
+  const offsetY = (t * 30) % gridSize;
+  ctx.translate(0, offsetY);
+  for(let x = 0; x <= W; x += gridSize) {
+    ctx.beginPath(); ctx.moveTo(x, -gridSize); ctx.lineTo(x, H + gridSize); ctx.stroke();
+  }
+  for(let y = -gridSize; y <= H; y += gridSize) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  ctx.restore();
+  
+  // Tech crosshairs
+  ctx.strokeStyle = 'rgba(56,225,198,0.4)';
+  ctx.lineWidth = 3;
+  for(let i=0; i<5; i++) {
+    const cx = ((i*3 + 2) % (W/gridSize | 0)) * gridSize;
+    const cy = (((i*7 + t*20) % H) / gridSize | 0) * gridSize + offsetY;
+    const s = 12 + Math.sin(t*4 + i)*4;
+    ctx.beginPath();
+    ctx.moveTo(cx - s, cy); ctx.lineTo(cx + s, cy);
+    ctx.moveTo(cx, cy - s); ctx.lineTo(cx, cy + s);
+    ctx.stroke();
+  }
+
+  // find active line
+  let active = lineTimings.find(s => t>=s.start && t<s.end) || lineTimings[lineTimings.length-1] || {text:'', start:0, end:dur, wordTimings:[]};
+  const segDur = Math.max(0.001, active.end - active.start);
+  const localT = Math.min(1, Math.max(0,(t - active.start)/segDur));
+  const fade = localT < 0.15 ? localT/0.15 : (localT > 0.85 ? (1-localT)/0.15 : 1);
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 64px Inter, sans-serif';
+  
+  const wordObjs = active.wordTimings || [];
+  const lines = wrapWords(wordObjs, W*0.82);
+  const lh = 78;
+  const totalH = lines.length*lh;
+  const startY = H/2 - totalH/2 + lh/2;
+  const spaceWidth = ctx.measureText(' ').width;
+
+  ctx.save();
+  ctx.globalAlpha = fade;
+  lines.forEach((line, i) => {
+    const y = startY + i*lh;
+    const lineWidth = line.reduce((acc, w) => acc + ctx.measureText(w.wText).width, 0) + (line.length - 1) * spaceWidth;
+    let x = W/2 - lineWidth/2;
+    
+    line.forEach(w => {
+      const wWidth = ctx.measureText(w.wText).width;
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      
+      let scale = 1;
+      let color = '#8A8D93';
+      if(t >= w.start && t < w.end) {
+        color = '#38E1C6';
+        scale = 1.05;
+      } else if (t >= w.end) {
+        color = '#F2F1ED';
+      }
+
+      ctx.save();
+      ctx.translate(x + wWidth/2, y);
+      ctx.scale(scale, scale);
+      
+      ctx.strokeText(w.wText, -wWidth/2, 0);
+      ctx.fillStyle = color;
+      ctx.fillText(w.wText, -wWidth/2, 0);
+      
+      ctx.restore();
+      
+      x += wWidth + spaceWidth;
+    });
+  });
+  ctx.restore();
+
+  // progress bar
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(0, H-8, W, 8);
+  ctx.fillStyle = '#38E1C6';
+  ctx.fillRect(0, H-8, W*(t/dur), 8);
+}
+
+function fmtTime(s){
+  const m = Math.floor(s/60), sec = Math.floor(s%60);
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+// ---------- 4. PLAYBACK (preview, speaker only) ----------
+
+let previewSource = null;
+let previewStartCtxTime = 0;
+let previewRAF = null;
+
+function stopPreview(){
+  if(previewSource){ try{previewSource.stop();}catch(e){} previewSource=null; }
+  if(previewRAF) cancelAnimationFrame(previewRAF);
+}
+
+$('playBtn').addEventListener('click', () => {
+  if(!audioBuffer) return;
+  stopPreview();
+  audioCtx.resume();
+  previewSource = audioCtx.createBufferSource();
+  previewSource.buffer = audioBuffer;
+  previewSource.connect(audioCtx.destination);
+  previewStartCtxTime = audioCtx.currentTime;
+  previewSource.start();
+  const loop = () => {
+    const t = audioCtx.currentTime - previewStartCtxTime;
+    if(t >= audioBuffer.duration){
+      drawFrame(audioBuffer.duration);
+      updateTimelineUI(audioBuffer.duration);
+      return;
+    }
+    drawFrame(t);
+    updateTimelineUI(t);
+    previewRAF = requestAnimationFrame(loop);
+  };
+  loop();
+});
+
+function updateTimelineUI(t){
+  const dur = audioBuffer.duration;
+  $('timecode').textContent = `${fmtTime(t)} / ${fmtTime(dur)}`;
+  const ph = $('playhead');
+  if(ph) ph.style.left = (t/dur*100)+'%';
+  document.querySelectorAll('.clip').forEach(c => {
+    const idx = +c.dataset.idx;
+    c.classList.toggle('active', t >= lineTimings[idx].start && t < lineTimings[idx].end);
+  });
+}
+
+// ---------- 5. RECORD TO VIDEO FILE ----------
+
+$('recordBtn').addEventListener('click', async () => {
+  if(!audioBuffer) return;
+  stopPreview();
+  audioCtx.resume();
+
+  const videoStream = canvas.captureStream(30);
+  const dest = audioCtx.createMediaStreamDestination();
+  const src = audioCtx.createBufferSource();
+  src.buffer = audioBuffer;
+  src.connect(dest);
+
+  const combined = new MediaStream([...videoStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
+  const recorder = new MediaRecorder(combined, {mimeType, videoBitsPerSecond: 5_000_000});
+  const chunks = [];
+  recorder.ondataavailable = e => { if(e.data.size>0) chunks.push(e.data); };
+
+  $('recordBtn').disabled = true;
+  $('recBadge').classList.add('on');
+
+  recorder.onstop = () => {
+    $('recBadge').classList.remove('on');
+    const blob = new Blob(chunks, {type:'video/webm'});
+    const url = URL.createObjectURL(blob);
+    const dl = $('downloadBtn');
+    dl.style.display = 'inline-block';
+    dl.onclick = () => {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (scriptData.title || 'short').replace(/[^a-z0-9]+/gi,'_').toLowerCase() + '.webm';
+      a.click();
+    };
+    $('recordBtn').disabled = false;
+  };
+
+  recorder.start();
+  src.start();
+  const startTime = audioCtx.currentTime;
+  const loop = () => {
+    const t = audioCtx.currentTime - startTime;
+    if(t >= audioBuffer.duration + 0.15){
+      drawFrame(audioBuffer.duration);
+      recorder.stop();
+      return;
+    }
+    drawFrame(t);
+    updateTimelineUI(Math.min(t, audioBuffer.duration));
+    requestAnimationFrame(loop);
+  };
+  loop();
+});
+
+// ---------- 6. BATCH MODE ----------
+$('batchBtn').addEventListener('click', async () => {
+  const key = requireKey(); if(!key) return;
+  const topics = $('topicInput').value.split('\n').map(t => t.trim()).filter(Boolean);
+  if(topics.length === 0){ alert('Enter at least one topic.'); return; }
+  
+  $('batchBtn').disabled = true;
+  stopPreview();
+  audioCtx.resume();
+
+  const failed = [];
+  for(let i=0; i<topics.length; i++) {
+    setStatus($('scriptStatus'), `Batch ${i+1}/${topics.length}: writing script...`);
+    try {
+      const prompt = `Write a 30-second YouTube Shorts script about: "${topics[i]}".
+Rules:
+- Total spoken word count between 68 and 78 words (this must read aloud in ~30 seconds at a natural pace).
+- Strong hook in the first line (first 3 seconds), no generic "did you know" openers.
+- Break the script into 5 to 7 short caption lines, each 8-14 words, each a natural spoken beat.
+- End with a punchy closing line, not a call to action.
+- Also generate: a short YouTube title (under 60 chars) and 5 relevant hashtags (no # symbol, just words).
+Reply with ONLY valid JSON, no markdown fences, in this exact shape:
+{"title":"...", "lines":["...","...","..."], "hashtags":["...","...","...","...","..."]}`;
+      const sData = await callGemini(key, 'gemini-2.5-flash', {
+        contents:[{parts:[{text: prompt}]}],
+        generationConfig:{ responseMimeType:'application/json' }
+      });
+      scriptData = JSON.parse(sData.candidates[0].content.parts[0].text);
+      renderScript();
+      $('scriptPanel').style.display = 'block';
+      $('voicePanel').style.display = 'block';
+      
+      setStatus($('voiceStatus'), `Batch ${i+1}/${topics.length}: generating voice...`);
+      const voice = $('voiceSelect').value;
+      const fullText = scriptData.lines.join(' ');
+      const vData = await callGemini(key, 'gemini-2.5-flash-preview-tts', {
+        contents:[{parts:[{text: fullText}]}],
+        generationConfig:{
+          responseModalities:['AUDIO'],
+          speechConfig:{ voiceConfig:{ prebuiltVoiceConfig:{ voiceName: voice } } }
+        }
+      });
+      const inline = vData.candidates[0].content.parts[0].inlineData;
+      const sampleRate = parseInt((inline.mimeType.match(/rate=(\d+)/)||[])[1] || 24000);
+      const pcmBytes = base64ToBytes(inline.data);
+      const wavBlob = pcm16ToWavBlob(pcmBytes, sampleRate);
+      audioBuffer = await audioCtx.decodeAudioData(await wavBlob.arrayBuffer());
+      computeLineTimings();
+      buildTimelineUI();
+      
+      setStatus($('scriptStatus'), `Batch ${i+1}/${topics.length}: rendering video...`);
+      await renderVideoForBatch();
+      await new Promise(r => setTimeout(r, 1000));
+    } catch(e) {
+      console.error(e);
+      failed.push({topic: topics[i], reason: e.message});
+      setStatus($('scriptStatus'), `Batch ${i+1}/${topics.length} failed (${e.message}) — skipping to next topic...`, 'err');
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+
+  if(failed.length === 0){
+    setStatus($('scriptStatus'), `Batch complete — all ${topics.length} videos generated.`, 'ok');
+  } else {
+    const okCount = topics.length - failed.length;
+    console.warn('Batch failures:', failed);
+    setStatus($('scriptStatus'), `Batch complete — ${okCount}/${topics.length} succeeded. Failed: ${failed.map(f=>f.topic).join(', ')} (see console for reasons).`, 'err');
+  }
+  $('batchBtn').disabled = false;
+});
+
+function renderVideoForBatch() {
+  return new Promise((resolve) => {
+    const videoStream = canvas.captureStream(30);
+    const dest = audioCtx.createMediaStreamDestination();
+    const src = audioCtx.createBufferSource();
+    src.buffer = audioBuffer;
+    src.connect(dest);
+
+    const combined = new MediaStream([...videoStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
+    const recorder = new MediaRecorder(combined, {mimeType, videoBitsPerSecond: 5_000_000});
+    const chunks = [];
+    recorder.ondataavailable = e => { if(e.data.size>0) chunks.push(e.data); };
+
+    $('recBadge').classList.add('on');
+    recorder.onstop = () => {
+      $('recBadge').classList.remove('on');
+      const blob = new Blob(chunks, {type:'video/webm'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (scriptData.title || 'short').replace(/[^a-z0-9]+/gi,'_').toLowerCase() + '.webm';
+      a.click();
+      resolve();
+    };
+
+    recorder.start();
+    src.start();
+    let startTime = audioCtx.currentTime;
+    const loop = () => {
+      const t = audioCtx.currentTime - startTime;
+      if(t >= audioBuffer.duration + 0.15){
+        drawFrame(audioBuffer.duration);
+        recorder.stop();
+        return;
+      }
+      drawFrame(t);
+      updateTimelineUI(Math.min(t, audioBuffer.duration));
+      requestAnimationFrame(loop);
+    };
+    loop();
+  });
+}
+
+// initial blank frame
+ctx.fillStyle = '#0E0F11';
+ctx.fillRect(0,0,canvas.width,canvas.height);
+ctx.fillStyle = '#8A8D93';
+ctx.font = '32px Inter, sans-serif';
+ctx.textAlign = 'center';
+ctx.fillText('write a script to begin', canvas.width/2, canvas.height/2);
+</script>
+</body>
+</html>
