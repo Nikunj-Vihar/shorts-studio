@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shorts Studio — 30s AI Shorts Generator</title>
+<title>Shorts Studio — AI Shorts Generator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -132,6 +132,18 @@
   .rec-badge.on{display:flex;}
   .rec-badge .d{width:7px;height:7px;border-radius:50%;background:var(--rec);animation:pulse 1s infinite;}
   @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.25;}}
+
+  .spinner{
+    width:12px;height:12px;
+    border:2px solid rgba(255,255,255,0.35);
+    border-top-color:currentColor;
+    border-radius:50%;
+    display:inline-block;
+    vertical-align:-2px;
+    margin-right:7px;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
 
   .timeline{
     width:300px;
@@ -275,7 +287,7 @@
 <div class="wrap">
 
   <header>
-    <div class="brand"><span class="dot"></span>SHORTS STUDIO<small>30s / vertical / auto-render</small></div>
+    <div class="brand"><span class="dot"></span>SHORTS STUDIO<small>vertical / auto-render</small></div>
     <div class="keyrow">
       <input id="apiKey" type="text" placeholder="Paste Gemini API key">
       <a href="https://aistudio.google.com/apikey" target="_blank">get a free key →</a>
@@ -310,6 +322,16 @@
             <textarea id="topicInput" rows="3" placeholder="e.g. a weird fact about octopuses&#10;the history of the sandwich"></textarea>
           </div>
         </div>
+        <div class="row">
+          <div>
+            <label>Target duration</label>
+            <select id="durationSelect">
+              <option value="30" selected>30s</option>
+              <option value="40">40s</option>
+              <option value="60">60s</option>
+            </select>
+          </div>
+        </div>
         <div class="actions">
           <button class="btn-ghost" id="surpriseBtn">🎲 Surprise me</button>
           <button class="btn-primary" id="scriptBtn">Write script</button>
@@ -319,7 +341,7 @@
       </div>
 
       <div class="panel" id="scriptPanel" style="display:none;">
-        <h2>02 · SCRIPT (~30s)</h2>
+        <h2 id="scriptPanelTitle">02 · SCRIPT (~30s)</h2>
         <div class="script-lines" id="scriptLines"></div>
         <div class="meta-tags" id="tagRow"></div>
       </div>
@@ -330,10 +352,36 @@
           <div>
             <label>Voice</label>
             <select id="voiceSelect">
-              <option value="Kore">Kore — calm, neutral</option>
-              <option value="Puck">Puck — upbeat, energetic</option>
-              <option value="Charon">Charon — deep, narrator</option>
-              <option value="Fenrir">Fenrir — bold, punchy</option>
+              <option value="Zephyr">Zephyr — Bright</option>
+              <option value="Puck">Puck — Upbeat</option>
+              <option value="Charon">Charon — Informative</option>
+              <option value="Kore" selected>Kore — Firm</option>
+              <option value="Fenrir">Fenrir — Excitable</option>
+              <option value="Leda">Leda — Youthful</option>
+              <option value="Orus">Orus — Firm</option>
+              <option value="Aoede">Aoede — Breezy</option>
+              <option value="Callirrhoe">Callirrhoe — Easy-going</option>
+              <option value="Autonoe">Autonoe — Bright</option>
+              <option value="Enceladus">Enceladus — Breathy</option>
+              <option value="Iapetus">Iapetus — Clear</option>
+              <option value="Umbriel">Umbriel — Easy-going</option>
+              <option value="Algieba">Algieba — Smooth</option>
+              <option value="Despina">Despina — Smooth</option>
+              <option value="Erinome">Erinome — Clear</option>
+              <option value="Algenib">Algenib — Gravelly</option>
+              <option value="Rasalgethi">Rasalgethi — Informative</option>
+              <option value="Laomedeia">Laomedeia — Upbeat</option>
+              <option value="Achernar">Achernar — Soft</option>
+              <option value="Alnilam">Alnilam — Firm</option>
+              <option value="Schedar">Schedar — Even</option>
+              <option value="Gacrux">Gacrux — Mature</option>
+              <option value="Pulcherrima">Pulcherrima — Forward</option>
+              <option value="Achird">Achird — Friendly</option>
+              <option value="Zubenelgenubi">Zubenelgenubi — Casual</option>
+              <option value="Vindemiatrix">Vindemiatrix — Gentle</option>
+              <option value="Sadachbia">Sadachbia — Lively</option>
+              <option value="Sadaltager">Sadaltager — Knowledgeable</option>
+              <option value="Sulafat">Sulafat — Warm</option>
             </select>
           </div>
         </div>
@@ -366,6 +414,20 @@ function setStatus(el, msg, cls){
   el.className = 'status' + (cls ? ' '+cls : '');
 }
 
+// Puts a button into a visibly-busy state (spinner + label swap) so
+// multi-second API calls don't read as the app being stuck, and restores
+// its original label + enabled state afterward.
+function setBusy(btn, busy, label){
+  if(busy){
+    if(btn.dataset.origLabel === undefined) btn.dataset.origLabel = btn.textContent;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span>${label}`;
+  } else {
+    btn.disabled = false;
+    if(btn.dataset.origLabel !== undefined) btn.textContent = btn.dataset.origLabel;
+  }
+}
+
 function requireKey(){
   const k = apiKeyInput.value.trim();
   if(!k){ alert('Paste a Gemini API key first (free at aistudio.google.com/apikey).'); return null; }
@@ -373,6 +435,32 @@ function requireKey(){
 }
 
 // ---------- 1. SCRIPT GENERATION ----------
+
+// Scales word-count / line-count / guardrail targets to the chosen duration,
+// using the original 30s numbers (68-78 words, 5-7 lines, 50-90 guardrail) as the base ratio.
+function getDurationTargets(durationValue){
+  const d = parseInt(durationValue, 10) || 30;
+  const scale = d / 30;
+  const wordsLow = Math.round(68 * scale);
+  const wordsHigh = Math.round(78 * scale);
+  const linesLow = Math.max(3, Math.round(5 * scale));
+  const linesHigh = Math.max(linesLow + 1, Math.round(7 * scale));
+  const guardLow = Math.round(50 * scale);
+  const guardHigh = Math.round(90 * scale);
+  return { duration: d, wordsLow, wordsHigh, linesLow, linesHigh, guardLow, guardHigh };
+}
+
+function buildScriptPrompt(topic, t){
+  return `Write a ${t.duration}-second YouTube Shorts script about: "${topic}".
+Rules:
+- Total spoken word count between ${t.wordsLow} and ${t.wordsHigh} words (this must read aloud in ~${t.duration} seconds at a natural pace).
+- Strong hook in the first line (first 3 seconds), no generic "did you know" openers.
+- Break the script into ${t.linesLow} to ${t.linesHigh} short caption lines, each 8-14 words, each a natural spoken beat.
+- End with a punchy closing line, not a call to action.
+- Also generate: a short YouTube title (under 60 chars) and 5 relevant hashtags (no # symbol, just words).
+Reply with ONLY valid JSON, no markdown fences, in this exact shape:
+{"title":"...", "lines":["...","...","..."], "hashtags":["...","...","...","...","..."]}`;
+}
 
 async function callGemini(key, model, body){
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
@@ -453,6 +541,7 @@ async function callGeminiAny(key, candidates, body){
 
 $('surpriseBtn').addEventListener('click', async () => {
   const key = requireKey(); if(!key) return;
+  setBusy($('surpriseBtn'), true, 'Thinking…');
   setStatus($('scriptStatus'), 'thinking of a topic…');
   try{
     const models = await resolveModels(key);
@@ -464,24 +553,24 @@ $('surpriseBtn').addEventListener('click', async () => {
     setStatus($('scriptStatus'), '');
   }catch(e){
     setStatus($('scriptStatus'), e.message, 'err');
+  }finally{
+    setBusy($('surpriseBtn'), false);
   }
+});
+
+$('durationSelect').addEventListener('change', () => {
+  const t = getDurationTargets($('durationSelect').value);
+  $('scriptPanelTitle').textContent = `02 · SCRIPT (~${t.duration}s)`;
 });
 
 $('scriptBtn').addEventListener('click', async () => {
   const key = requireKey(); if(!key) return;
   const topic = $('topicInput').value.trim() || 'a surprising fact people rarely know';
+  const targets = getDurationTargets($('durationSelect').value);
+  setBusy($('scriptBtn'), true, 'Writing…');
   setStatus($('scriptStatus'), 'writing script…');
-  $('scriptBtn').disabled = true;
   try{
-    const prompt = `Write a 30-second YouTube Shorts script about: "${topic}".
-Rules:
-- Total spoken word count between 68 and 78 words (this must read aloud in ~30 seconds at a natural pace).
-- Strong hook in the first line (first 3 seconds), no generic "did you know" openers.
-- Break the script into 5 to 7 short caption lines, each 8-14 words, each a natural spoken beat.
-- End with a punchy closing line, not a call to action.
-- Also generate: a short YouTube title (under 60 chars) and 5 relevant hashtags (no # symbol, just words).
-Reply with ONLY valid JSON, no markdown fences, in this exact shape:
-{"title":"...", "lines":["...","...","..."], "hashtags":["...","...","...","...","..."]}`;
+    const prompt = buildScriptPrompt(topic, targets);
 
     const models = await resolveModels(key);
     const data = await callGeminiAny(key, models.textCandidates, {
@@ -490,23 +579,24 @@ Reply with ONLY valid JSON, no markdown fences, in this exact shape:
     });
     const raw = data.candidates[0].content.parts[0].text;
     scriptData = JSON.parse(raw);
-    
+
     const wordCount = scriptData.lines.join(' ').trim().split(/\s+/).length;
     let statusMsg = 'done';
     let statusCls = 'ok';
-    if (wordCount < 50 || wordCount > 90) {
-      statusMsg = `Warning: Script is ${wordCount} words. Audio may fall outside ~30s. Consider regenerating.`;
+    if (wordCount < targets.guardLow || wordCount > targets.guardHigh) {
+      statusMsg = `Warning: Script is ${wordCount} words. Audio may fall outside ~${targets.duration}s target. Consider regenerating.`;
       statusCls = 'err';
     }
 
     renderScript();
+    $('scriptPanelTitle').textContent = `02 · SCRIPT (~${targets.duration}s)`;
     setStatus($('scriptStatus'), statusMsg, statusCls);
     $('scriptPanel').style.display = 'block';
     $('voicePanel').style.display = 'block';
   }catch(e){
     setStatus($('scriptStatus'), e.message, 'err');
   }finally{
-    $('scriptBtn').disabled = false;
+    setBusy($('scriptBtn'), false);
   }
 });
 
@@ -565,7 +655,7 @@ $('voiceBtn').addEventListener('click', async () => {
   const voice = $('voiceSelect').value;
   const fullText = scriptData.lines.join(' ');
   setStatus($('voiceStatus'), 'generating voiceover…');
-  $('voiceBtn').disabled = true;
+  setBusy($('voiceBtn'), true, 'Generating…');
   try{
     const models = await resolveModels(key);
     const data = await callGeminiAny(key, models.ttsCandidates, {
@@ -603,7 +693,7 @@ $('voiceBtn').addEventListener('click', async () => {
   }catch(e){
     setStatus($('voiceStatus'), e.message, 'err');
   }finally{
-    $('voiceBtn').disabled = false;
+    setBusy($('voiceBtn'), false);
   }
 });
 
@@ -849,7 +939,7 @@ $('recordBtn').addEventListener('click', async () => {
   const chunks = [];
   recorder.ondataavailable = e => { if(e.data.size>0) chunks.push(e.data); };
 
-  $('recordBtn').disabled = true;
+  setBusy($('recordBtn'), true, 'Rendering…');
   $('recBadge').classList.add('on');
 
   recorder.onstop = () => {
@@ -864,7 +954,7 @@ $('recordBtn').addEventListener('click', async () => {
       a.download = (scriptData.title || 'short').replace(/[^a-z0-9]+/gi,'_').toLowerCase() + '.webm';
       a.click();
     };
-    $('recordBtn').disabled = false;
+    setBusy($('recordBtn'), false);
   };
 
   recorder.start();
@@ -890,33 +980,29 @@ $('batchBtn').addEventListener('click', async () => {
   const topics = $('topicInput').value.split('\n').map(t => t.trim()).filter(Boolean);
   if(topics.length === 0){ alert('Enter at least one topic.'); return; }
   
-  $('batchBtn').disabled = true;
+  const targets = getDurationTargets($('durationSelect').value);
+  setBusy($('batchBtn'), true, `Batch 1/${topics.length}…`);
   stopPreview();
   audioCtx.resume();
   const models = await resolveModels(key);
 
   const failed = [];
   for(let i=0; i<topics.length; i++) {
+    setBusy($('batchBtn'), true, `Batch ${i+1}/${topics.length}: script…`);
     setStatus($('scriptStatus'), `Batch ${i+1}/${topics.length}: writing script...`);
     try {
-      const prompt = `Write a 30-second YouTube Shorts script about: "${topics[i]}".
-Rules:
-- Total spoken word count between 68 and 78 words (this must read aloud in ~30 seconds at a natural pace).
-- Strong hook in the first line (first 3 seconds), no generic "did you know" openers.
-- Break the script into 5 to 7 short caption lines, each 8-14 words, each a natural spoken beat.
-- End with a punchy closing line, not a call to action.
-- Also generate: a short YouTube title (under 60 chars) and 5 relevant hashtags (no # symbol, just words).
-Reply with ONLY valid JSON, no markdown fences, in this exact shape:
-{"title":"...", "lines":["...","...","..."], "hashtags":["...","...","...","...","..."]}`;
+      const prompt = buildScriptPrompt(topics[i], targets);
       const sData = await callGeminiAny(key, models.textCandidates, {
         contents:[{parts:[{text: prompt}]}],
         generationConfig:{ responseMimeType:'application/json' }
       });
       scriptData = JSON.parse(sData.candidates[0].content.parts[0].text);
       renderScript();
+      $('scriptPanelTitle').textContent = `02 · SCRIPT (~${targets.duration}s)`;
       $('scriptPanel').style.display = 'block';
       $('voicePanel').style.display = 'block';
-      
+
+      setBusy($('batchBtn'), true, `Batch ${i+1}/${topics.length}: voice…`);
       setStatus($('voiceStatus'), `Batch ${i+1}/${topics.length}: generating voice...`);
       const voice = $('voiceSelect').value;
       const fullText = scriptData.lines.join(' ');
@@ -934,7 +1020,8 @@ Reply with ONLY valid JSON, no markdown fences, in this exact shape:
       audioBuffer = await audioCtx.decodeAudioData(await wavBlob.arrayBuffer());
       computeLineTimings();
       buildTimelineUI();
-      
+
+      setBusy($('batchBtn'), true, `Batch ${i+1}/${topics.length}: render…`);
       setStatus($('scriptStatus'), `Batch ${i+1}/${topics.length}: rendering video...`);
       await renderVideoForBatch();
       await new Promise(r => setTimeout(r, 1000));
@@ -953,7 +1040,7 @@ Reply with ONLY valid JSON, no markdown fences, in this exact shape:
     console.warn('Batch failures:', failed);
     setStatus($('scriptStatus'), `Batch complete — ${okCount}/${topics.length} succeeded. Failed: ${failed.map(f=>f.topic).join(', ')} (see console for reasons).`, 'err');
   }
-  $('batchBtn').disabled = false;
+  setBusy($('batchBtn'), false);
 });
 
 function renderVideoForBatch() {
